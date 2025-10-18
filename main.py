@@ -8,7 +8,12 @@ class Musteri:
         self.soyad = soyad
         self.__tc = tc
         self.__sifre = sifre
-        
+    
+    def giris_kontrol(self, tc, sifre):
+        return self.__tc == tc and self.__sifre == sifre 
+
+
+
 
 class Hesap:
     def __init__(self,iban,musteri,bakiye=0.0,borc=0.0):
@@ -18,6 +23,7 @@ class Hesap:
         self.borc = borc
         self.islem = []
 
+            # ---- Para yatırma ----
     def para_yatir(self,miktar):
         if miktar > 0:
             self.bakiye += miktar 
@@ -25,7 +31,8 @@ class Hesap:
             print(f"{miktar}₺ yatırıldı. Yeni bakiye: {self.bakiye}₺")
         else:
             print("Geçersiz işlem! Lütfen geçerli bir değer giriniz.")
-    
+            
+            # ---- Para çekme ----
     def para_cekme(self,miktar):
         if miktar <= 0:
             print("Geçersiz işlem! Lütfen geçerli bir değer giriniz. ")
@@ -35,7 +42,8 @@ class Hesap:
             self.bakiye -= miktar
             self.islem.append(IslemKaydi("Para çekme",-miktar))
             print(f"{miktar}₺ çekildi. Kalan bakiye: {self.bakiye}₺")
-
+    
+        # ---- Borç yatırma ----
     def borc_yatirma(self,miktar):
         if miktar <= 0:
             print("Geçersiz miktar!")
@@ -49,6 +57,7 @@ class Hesap:
             self.islem.append(IslemKaydi("Borç Ödeme: ", -miktar))
             print(f"{miktar}₺ borç ödendi. Kalan borç: {self.borc}₺")
     
+        # ---- Transfer yapma ----
     def transfer_yap(self,farkli_musteri,miktar):
         if miktar <= 0:
             print("Geçersiz miktar!")
@@ -61,6 +70,7 @@ class Hesap:
             farkli_musteri.islem.append(IslemKaydi(f"{self.ad} adlı kişiden transfer", miktar))
             print(f"{farkli_musteri.ad} adlı kişiye {miktar}₺ gönderildi.")
 
+        # ---- Bilgileri yazdır ----
     def bilgi_goster(self):
         print(f"\n--- {self.musteri.ad} {self.musteri.soyad} ---")
         print(f"TC: {self.musteri._Musteri__tc}")
