@@ -1,122 +1,175 @@
 import json
-import os
 from datetime import datetime
+import os
 
 DATA_FILE = "data.json"
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        default_data = {
-            "musteriler": [
-                {
-                    "tc": "11111111111",
-                    "ad": "Ali",
-                    "soyad": "Vural",
-                    "sifre": "1234",
-                    "hesaplar": [
-                        {
-                            "iban": "TR001",
-                            "hesap_adi": "Vadesiz Hesap",
-                            "bakiye": 5000.0,
-                            "borc": 1000.0,
-                            "islemler": []
-                        },
-                        {
-                            "iban": "TR002",
-                            "hesap_adi": "Vadeli Hesap",
-                            "bakiye": 10000.0,
-                            "borc": 0.0,
-                            "islemler": []
-                        }
-                    ]
-                }
-            ]
+class Islem:
+    def __init__(self, aciklama, miktar):
+        self.tarih = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        self.aciklama = aciklama
+        self.tutar = miktar
+
+    def to_dict(self):
+        return {
+            "tarih": self.tarih,
+            "aciklama": self.aciklama,
+            "tutar": self.tutar
         }
-        save_data(default_data)
-        return default_data
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
 
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+class Hesap:
+    def __init__(self, iban, hesap_adi, bakiye=0.0, borc=0.0, islemler=None):
+        self.iban = iban
+        self.hesap_adi = hesap_adi
+        self.bakiye = bakiye
+        self.borc = borc
+        self.islemler = islemler if islemler else []
 
-def get_musteri_by_tc(tc):
-    data = load_data()
-    for musteri in data["musteriler"]:
-        if musteri["tc"] == tc:
-            return musteri
-    return None
-
-def get_hesap_by_iban(tc, iban):
-    musteri = get_musteri_by_tc(tc)
-    if musteri:
-        for hesap in musteri["hesaplar"]:
-            if hesap["iban"] == iban:
-                return hesap
-    return None
-
-def get_all_hesaplar(tc):
-    musteri = get_musteri_by_tc(tc)
-    if musteri:
-        return musteri["hesaplar"]
-    return []
-
-def update_bakiye(tc, iban, yeni_bakiye):
-    data = load_data()
-    for musteri in data["musteriler"]:
-        if musteri["tc"] == tc:
-            for hesap in musteri["hesaplar"]:
-                if hesap["iban"] == iban:
-                    hesap["bakiye"] = yeni_bakiye
-                    save_data(data)
-                    return True
-    return False
-
-def update_borc(tc, iban, yeni_borc):
-    data = load_data()
-    for musteri in data["musteriler"]:
-        if musteri["tc"] == tc:
-            for hesap in musteri["hesaplar"]:
-                if hesap["iban"] == iban:
-                    hesap["borc"] = yeni_borc
-                    save_data(data)
-                    return True
-    return False
-
-def add_islem(tc, iban, aciklama, miktar):
-    data = load_data()
-    for musteri in data["musteriler"]:
-        if musteri["tc"] == tc:
-            for hesap in musteri["hesaplar"]:
-                if hesap["iban"] == iban:
-                    islem = {
-                        "tarih": datetime.now().strftime("%d.%m.%Y %H:%M:%S"),
-                        "aciklama": aciklama,
-                        "tutar": miktar
-                    }
-                    hesap["islemler"].append(islem)
-                    save_data(data)
-                    return True
-    return False
-
-def get_islemler(tc, iban):
-    hesap = get_hesap_by_iban(tc, iban)
-    if hesap:
-        return hesap["islemler"]
-    return []
-
-def verify_login(tc, sifre):
-    musteri = get_musteri_by_tc(tc)
-    if musteri and musteri["sifre"] == sifre:
-        return True
-    return False
-
-def add_hesap(tc, yeni_hesap):
-    data = load_data()
-    for musteri in data["musteriler"]:
-        if musteri["tc"] == tc:
-            musteri["hesaplar"].append(yeni_hesap)
-            save_data(data)
+    def para_yatir(self, miktar):
+        if miktar > 0:
+            self.bakiye += miktar
+            self.islemler.append(Islem("Para yatırma", miktar).to_dict())
             return True
-    return False
+        return False
+
+    def para_cek(self, miktar):
+        if 0 < miktar <= self.bakiye:
+            self.bakiye -= miktar
+            self.islemler.append(Islem("Para çekme", -miktar).to_dict())
+            return True
+        return False
+
+    def borc_ode(self, miktar):
+        if 0 < miktar <= self.borc and miktar <= self.bakiye:
+            self.bakiye -= miktar
+            self.borc -= miktar
+            self.islemler.append(Islem("Borç ödeme", -miktar).to_dict())
+            return True
+        return False
+
+    def to_dict(self):
+        return {
+            "iban": self.iban,
+            "hesap_adi": self.hesap_adi,
+            "bakiye": self.bakiye,
+            "borc": self.borc,
+            "islemler": self.islemler
+        }
+
+class Musteri:
+    def __init__(self, tc, ad, soyad, sifre, hesaplar=None):
+        self.tc = tc
+        self.ad = ad
+        self.soyad = soyad
+        self.sifre = sifre
+        self.hesaplar = hesaplar if hesaplar else []
+
+    def add_hesap(self, hesap):
+        self.hesaplar.append(hesap)
+
+    def get_hesap_by_iban(self, iban):
+        for hesap in self.hesaplar:
+            if hesap.iban == iban:
+                return hesap
+        return None
+
+    def to_dict(self):
+        return {
+            "tc": self.tc,
+            "ad": self.ad,
+            "soyad": self.soyad,
+            "sifre": self.sifre,
+            "hesaplar": [h.to_dict() for h in self.hesaplar]
+        }
+
+
+class Banka:
+    def __init__(self, dosya_ad="data.json"):
+        self.data_file = dosya_ad
+        self.musteriler = []
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.data_file):
+            with open(self.data_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.musteriler = []
+            for m in data.get("musteriler", []):
+                hesaplar = []
+                for h in m.get("hesaplar", []):
+                    hesaplar.append(Hesap(
+                        h["iban"], h["hesap_adi"], h["bakiye"], h["borc"], h.get("islemler", [])
+                    ))
+                self.musteriler.append(
+                    Musteri(m["tc"], m["ad"], m["soyad"], m["sifre"], hesaplar)
+                )
+        else:
+            self.musteriler = []
+    
+    def save(self):
+        data = {
+            "musteriler": [m.to_dict() for m in self.musteriler]
+        }
+        with open(self.data_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    def get_musteri(self, tc):
+        for m in self.musteriler:
+            if m.tc == tc:
+                return m
+        return None
+
+    def verify_login(self, tc, sifre):
+        m = self.get_musteri(tc)
+        return bool(m and m.sifre == sifre)
+
+    def add_hesap(self, tc, hesap):
+        m = self.get_musteri(tc)
+        if m:
+            m.add_hesap(hesap)
+            self.save()
+            return True
+        return False
+
+    def get_all_hesaplar(self, tc):
+        m = self.get_musteri(tc)
+        return [h.to_dict() for h in m.hesaplar] if m else []
+
+    def get_hesap_by_iban(self, tc, iban):
+        m = self.get_musteri(tc)
+        if m:
+            h = m.get_hesap_by_iban(iban)
+            return h
+        return None
+
+    def update_hesap(self, tc, iban, attr, value):
+        h = self.get_hesap_by_iban(tc, iban)
+        if h:
+            setattr(h, attr, value)
+            self.save()
+            return True
+        return False
+
+    def add_islem(self, tc, iban, aciklama, miktar):
+        h = self.get_hesap_by_iban(tc, iban)
+        if h:
+            h.islemler.append(Islem(aciklama, miktar).to_dict())
+            self.save()
+            return True
+        return False
+
+    def get_islemler(self, tc, iban):
+        h = self.get_hesap_by_iban(tc, iban)
+        if h:
+            return h.islemler
+        return []
+
+# Kullanım Örneği:
+if __name__ == "__main__":
+    banka = Banka()
+    # Örnek: Yeni müşteri/hesap ekleme, veri görüntüleme, güncelleme vs.
+    print("--- Tüm müşteriler ve hesapları ---")
+    for musteri in banka.musteriler:
+        print(musteri.tc, musteri.ad, musteri.soyad)
+        for h in musteri.hesaplar:
+            print("   ", h.iban, h.hesap_adi, h.bakiye, h.borc)
