@@ -1,0 +1,48 @@
+{
+  "musteriler": [
+    {
+      "tc": "11111111111",
+      "ad": "Ali",
+      "soyad": "Vural",
+      "sifre": "1234",
+      "hesaplar": [
+        {
+          "iban": "TR001",
+          "hesap_adi": "Vadesiz Hesap",
+          "bakiye": 5000.0,
+          "borc": 1000.0,
+          "islemler": []
+        },
+        {
+          "iban": "TR002",
+          "hesap_adi": "Vadeli Hesap",
+          "bakiye": 10000.0,
+          "borc": 0.0,
+          "islemler": []
+        },
+        {
+          "iban": "TR005",
+          "hesap_adi": "Ek Hesap",
+          "bakiye": 5000.0,
+          "borc": 100.0,
+          "islemler": []
+        }
+      ]
+    },
+    {
+      "tc": "22222222222",
+      "ad": "Ayşe",
+      "soyad": "Demir",
+      "sifre": "5678",
+      "hesaplar": [
+        {
+          "iban": "TR003",
+          "hesap_adi": "Ana Hesap",
+          "bakiye": 3000.0,
+          "borc": 500.0,
+          "islemler": []
+        }
+      ]
+    }
+  ]
+}

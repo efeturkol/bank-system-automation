@@ -1,1 +1,18 @@
-.venv/
+# Python sanal ortamı
+venv/
+__pycache__/
+*.pyc
+
+# React bağımlılık klasörleri
+frontend/node_modules/
+frontend/build/
+
+# Sistem dosyaları
+.DS_Store
+Thumbs.db
+
+# Ortam değişkenleri
+.env
+
+# VS Code ayarları (kişisel)
+.vscode/
