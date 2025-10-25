@@ -237,11 +237,3 @@ class Banka:
         self.save()
         return True
 
-if __name__ == "__main__":
-    banka = Banka()
-    # Örnek kullanım
-    musteri1 = Musteri("12345678901", "Ali", "Veli", "sifre123")
-    hesap1 = Hesap("TR0000000001", "Vadesiz Hesap", musteri1, 1000.0, 200.0)
-    musteri1.add_hesap(hesap1)
-    banka.musteriler.append(musteri1)
-    banka.save()
