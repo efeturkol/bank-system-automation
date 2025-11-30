@@ -1,9 +1,15 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import main as data_manager
+
+# main.py dosyasından BankaSistemi ve Hesap sınıflarını dahil ediyoruz
+# (Dosya adının main.py olduğunu varsayıyorum)
+from main import BankaSistemi, Hesap
 
 app = Flask(__name__)
 CORS(app)
+
+# Sistemi başlat (Veritabanını otomatik yükler)
+banka = BankaSistemi()
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -11,15 +17,18 @@ def login():
         data = request.get_json()
         tc = data.get("tc")
         sifre = data.get("sifre")
-        if data_manager.verify_login(tc, sifre):
-            musteri = data_manager.get_musteri_by_tc(tc)
+
+        # Facade üzerinden giriş yapıyoruz (Private şifreye dokunmuyoruz)
+        musteri = banka.giris(tc, sifre)
+
+        if musteri:
             return jsonify({
                 "success": True,
                 "message": "Giriş başarılı",
                 "musteri": {
-                    "tc": musteri["tc"],
-                    "ad": musteri["ad"],
-                    "soyad": musteri["soyad"]
+                    "tc": musteri.tc,
+                    "ad": musteri.ad,
+                    "soyad": musteri.soyad
                 }
             })
         else:
@@ -33,37 +42,29 @@ def login():
 @app.route("/hesaplar/<tc>", methods=["GET"])
 def hesaplar(tc):
     try:
-        hesaplar = data_manager.get_all_hesaplar(tc)
-        if hesaplar:
+        musteri = banka.musteri_bul(tc)
+        if musteri:
+            # Musteri içindeki 'hesaplar' property'sini kullanıyoruz
+            # Her hesap nesnesinin kendi 'to_dict' metodunu çağırıyoruz
             return jsonify({
                 "success": True,
-                "hesaplar": [
-                    {
-                        "iban": h["iban"],
-                        "hesap_adi": h["hesap_adi"],
-                        "bakiye": h["bakiye"],
-                        "borc": h["borc"]
-                    } for h in hesaplar
-                ]
+                "hesaplar": [h.to_dict() for h in musteri.hesaplar]
             })
-        return jsonify({"success": False, "message": "Hesap bulunamadı"}), 404
+        return jsonify({"success": False, "message": "Müşteri bulunamadı"}), 404
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/hesap/<tc>/<iban>", methods=["GET"])
 def hesap_detay(tc, iban):
     try:
-        hesap = data_manager.get_hesap_by_iban(tc, iban)
-        if hesap:
-            return jsonify({
-                "success": True,
-                "hesap": {
-                    "iban": hesap["iban"],
-                    "hesap_adi": hesap["hesap_adi"],
-                    "bakiye": hesap["bakiye"],
-                    "borc": hesap["borc"]
-                }
-            })
+        musteri = banka.musteri_bul(tc)
+        if musteri:
+            hesap = musteri.hesap_bul(iban)
+            if hesap:
+                return jsonify({
+                    "success": True,
+                    "hesap": hesap.to_dict()
+                })
         return jsonify({"success": False, "message": "Hesap bulunamadı"}), 404
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
@@ -75,15 +76,19 @@ def yatir():
         tc = data.get("tc")
         iban = data.get("iban")
         miktar = float(data.get("miktar", 0))
-        if miktar <= 0:
-            return jsonify({"success": False, "message": "Geçersiz miktar!"}), 400
-        hesap = data_manager.get_hesap_by_iban(tc, iban)
-        if not hesap:
-            return jsonify({"success": False, "message": "Hesap bulunamadı!"}), 404
-        yeni_bakiye = hesap["bakiye"] + miktar
-        data_manager.update_bakiye(tc, iban, yeni_bakiye)
-        data_manager.add_islem(tc, iban, "Para yatırma", miktar)
-        return jsonify({"success": True, "message": f"{miktar}₺ yatırıldı", "bakiye": yeni_bakiye})
+
+        # BankaSistemi (Facade) üzerindeki metodu kullanıyoruz
+        # Bu metot arka planda kaydetme işlemini de yapıyor
+        if banka.islem_para_yatir(tc, iban, miktar):
+            # Güncel bakiyeyi döndürmek için hesabı tekrar çekiyoruz
+            hesap = banka.musteri_bul(tc).hesap_bul(iban)
+            return jsonify({
+                "success": True,
+                "message": f"{miktar}₺ yatırıldı",
+                "bakiye": hesap.bakiye
+            })
+
+        return jsonify({"success": False, "message": "İşlem başarısız (Müşteri yok veya miktar hatalı)"}), 400
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
@@ -94,17 +99,16 @@ def cek():
         tc = data.get("tc")
         iban = data.get("iban")
         miktar = float(data.get("miktar", 0))
-        hesap = data_manager.get_hesap_by_iban(tc, iban)
-        if not hesap:
-            return jsonify({"success": False, "message": "Hesap bulunamadı!"}), 404
-        if miktar <= 0:
-            return jsonify({"success": False, "message": "Geçersiz miktar!"}), 400
-        if miktar > hesap["bakiye"]:
-            return jsonify({"success": False, "message": "Yetersiz bakiye!"}), 400
-        yeni_bakiye = hesap["bakiye"] - miktar
-        data_manager.update_bakiye(tc, iban, yeni_bakiye)
-        data_manager.add_islem(tc, iban, "Para çekme", -miktar)
-        return jsonify({"success": True, "message": f"{miktar}₺ çekildi", "bakiye": yeni_bakiye})
+
+        if banka.islem_para_cek(tc, iban, miktar):
+            hesap = banka.musteri_bul(tc).hesap_bul(iban)
+            return jsonify({
+                "success": True,
+                "message": f"{miktar}₺ çekildi",
+                "bakiye": hesap.bakiye
+            })
+
+        return jsonify({"success": False, "message": "Yetersiz bakiye veya hatalı işlem"}), 400
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
@@ -115,25 +119,38 @@ def borc_ode():
         tc = data.get("tc")
         iban = data.get("iban")
         miktar = float(data.get("miktar", 0))
-        hesap = data_manager.get_hesap_by_iban(tc, iban)
-        if not hesap:
-            return jsonify({"success": False, "message": "Hesap bulunamadı!"}), 404
-        if miktar <= 0 or miktar > hesap["borc"] or miktar > hesap["bakiye"]:
-            return jsonify({"success": False, "message": "Geçersiz borç ödeme!"}), 400
-        yeni_bakiye = hesap["bakiye"] - miktar
-        yeni_borc = hesap["borc"] - miktar
-        data_manager.update_bakiye(tc, iban, yeni_bakiye)
-        data_manager.update_borc(tc, iban, yeni_borc)
-        data_manager.add_islem(tc, iban, "Borç ödeme", -miktar)
-        return jsonify({"success": True, "message": f"{miktar}₺ borç ödendi", "bakiye": yeni_bakiye, "borc": yeni_borc})
+
+        # Borç ödeme için ana sınıfımızda bir wrapper yoktu,
+        # ancak 'hesap_servisi' property'si üzerinden servise ulaşabiliriz.
+        musteri = banka.musteri_bul(tc)
+        if musteri:
+            hesap = musteri.hesap_bul(iban)
+            if hesap:
+                # Servis üzerinden işlem yap
+                if banka.hesap_servisi.borc_ode(hesap, miktar):
+                    banka.kaydet() # Değişikliği manuel kaydediyoruz
+                    return jsonify({
+                        "success": True,
+                        "message": f"{miktar}₺ borç ödendi",
+                        "bakiye": hesap.bakiye,
+                        "borc": hesap.borc
+                    })
+
+        return jsonify({"success": False, "message": "Borç ödeme başarısız"}), 400
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
 @app.route("/islemler/<tc>/<iban>", methods=["GET"])
 def islemler(tc, iban):
     try:
-        islem_listesi = data_manager.get_islemler(tc, iban)
-        return jsonify({"success": True, "islemler": islem_listesi})
+        musteri = banka.musteri_bul(tc)
+        if musteri:
+            hesap = musteri.hesap_bul(iban)
+            if hesap:
+                # Hesap nesnesinin to_dict çıktısındaki islemler listesini alıyoruz
+                return jsonify({"success": True, "islemler": hesap.to_dict()["islemler"]})
+
+        return jsonify({"success": False, "message": "Hesap bulunamadı"}), 404
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
@@ -142,17 +159,24 @@ def hesap_ekle():
     try:
         data = request.get_json()
         tc = data.get("tc")
-        yeni_hesap = {
-            "iban": data.get("iban"),
-            "hesap_adi": data.get("hesap_adi"),
-            "bakiye": float(data.get("bakiye", 0)),
-            "borc": float(data.get("borc", 0)),
-            "islemler": []
-        }
-        ok = data_manager.add_hesap(tc, yeni_hesap)
-        if ok:
-            return jsonify({"success": True, "message": "Hesap eklendi!"})
-        return jsonify({"success": False, "message": "Müşteri bulunamadı."}), 404
+
+        musteri = banka.musteri_bul(tc)
+        if not musteri:
+            return jsonify({"success": False, "message": "Müşteri bulunamadı."}), 404
+
+        # Yeni Hesap Nesnesi Oluşturuyoruz (Modeli Kullanarak)
+        yeni_hesap = Hesap(
+            iban=data.get("iban"),
+            hesap_adi=data.get("hesap_adi"),
+            bakiye=float(data.get("bakiye", 0)),
+            borc=float(data.get("borc", 0))
+        )
+
+        # Nesneyi müşteriye ekliyoruz
+        musteri.hesap_ekle(yeni_hesap)
+        banka.kaydet()
+
+        return jsonify({"success": True, "message": "Hesap başarıyla eklendi!"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
